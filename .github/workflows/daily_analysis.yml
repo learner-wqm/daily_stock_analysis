@@ -1,10 +1,8 @@
 name: stock-analysis
-
 on:
   schedule:
     - cron: '0 10 * * 1-5'
   workflow_dispatch:
-
 jobs:
   analyze:
     runs-on: ubuntu-latest
@@ -17,28 +15,17 @@ jobs:
       - run: mkdir -p reports
       - name: run-analysis
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
-          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
-          STOCK_LIST: ${{ secrets.STOCK_LIST }}
+          GEMINI_API_KEY: '${{ secrets.GEMINI_API_KEY }}'
+          OPENAI_API_KEY: '${{ secrets.OPENAI_API_KEY }}'
+          OPENAI_BASE_URL: '${{ secrets.OPENAI_BASE_URL }}'
+          OPENAI_MODEL: '${{ secrets.OPENAI_MODEL }}'
+          STOCK_LIST: '${{ secrets.STOCK_LIST }}'
         run: python main.py
       - name: pushplus-notify
         if: always()
         env:
-          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-        run: |
-          python3 -c "
-import os, requests, glob
-t = os.getenv('PUSHPLUS_TOKEN')
-if not t: exit(0)
-fs = glob.glob('reports/*')
-if not fs: exit(0)
-latest = max(fs, key=os.path.getctime)
-with open(latest, 'r', encoding='utf-8') as f:
-    c = f.read()[:8000]
-requests.post('http://www.pushplus.plus/send', json={'token': t, 'title': '鑲＄エ鎶ュ憡', 'content': c, 'template': 'txt'})
-"
+          PUSHPLUS_TOKEN: '${{ secrets.PUSHPLUS_TOKEN }}'
+        run: python3 send_notify.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
