@@ -203,7 +203,80 @@ jobs:
           elif [ "$MODE" = "stocks-only" ]; then
             python main.py --no-market-review
           else
-            python main.py
+            
+          # 发送 Telegram 通知
+          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+            echo ""
+            echo "=========================================="
+            echo "📱 发送 Telegram 通知"
+            echo "=========================================="
+            
+            # 查找生成的报告文件
+            REPORT_FILE=$(ls -t reports/*.md 2>/dev/null | head -1)
+            
+            if [ -n "$REPORT_FILE" ] && [ -f "$REPORT_FILE" ]; then
+              echo "找到报告: $REPORT_FILE"
+              
+              # 读取报告内容（前4000字符，Telegram限制）
+              REPORT_CONTENT=$(head -c 4000 "$REPORT_FILE")
+              
+              # 使用 Python 发送
+              python3 << 'PYEOF'
+import os
+import requests
+import json
+
+token = os.environ.get('TELEGRAM_BOT_TOKEN')
+chat_id = os.environ.get('TELEGRAM_CHAT_ID')
+thread_id = os.environ.get('TELEGRAM_MESSAGE_THREAD_ID')
+
+# 读取报告
+report_file = os.environ.get('REPORT_FILE', 'reports/latest.md')
+if os.path.exists(report_file):
+    with open(report_file, 'r', encoding='utf-8') as f:
+        content = f.read()[:4000]
+else:
+    # 尝试查找任何报告文件
+    import glob
+    files = glob.glob('reports/*.md')
+    if files:
+        with open(max(files, key=os.path.getctime), 'r', encoding='utf-8') as f:
+            content = f.read()[:4000]
+    else:
+        content = "未找到报告文件"
+
+# 如果太长，添加省略号
+if len(content) >= 4000:
+    content += "\n\n... (报告已截断)"
+
+# 发送消息
+url = f"https://api.telegram.org/bot{token}/sendMessage"
+payload = {
+    "chat_id": chat_id,
+    "text": f"📈 股票分析报告\n\n{content}",
+    "parse_mode": "Markdown",
+    "disable_web_page_preview": True
+}
+
+if thread_id:
+    payload["message_thread_id"] = thread_id
+
+try:
+    response = requests.post(url, json=payload, timeout=30)
+    result = response.json()
+    if result.get("ok"):
+        print(f"✅ Telegram 发送成功，Message ID: {result['result']['message_id']}")
+    else:
+        print(f"❌ 发送失败: {result.get('description')}")
+except Exception as e:
+    print(f"❌ 发送异常: {e}")
+PYEOF
+            else
+              echo "⚠️ 未找到报告文件"
+            fi
+          else
+            echo "⚠️ Telegram 未配置，跳过发送"
+          fipython main.py
           fi
       
       - name: 上传分析报告
