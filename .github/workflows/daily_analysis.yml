@@ -1,7 +1,7 @@
 name: 每日股票分析
 
 on:
-  # 定时触发 - 每天北京时间 18:00 (UTC 10:00)
+  # 定时任务 - 每天北京时间 18:00 (UTC 10:00)
   schedule:
     - cron: '0 10 * * 1-5'     # 周一到周五，UTC 10:00 = 北京时间 18:00
   
@@ -14,11 +14,11 @@ on:
         default: 'full'
         type: choice
         options:
-          - full          # 完整分析（股票+大盘）
-          - market-only   # 仅大盘复盘
+          - full          # 完整分析（股票+市场）
+          - market-only   # 仅市场综述
           - stocks-only   # 仅股票分析
 
-# 并发控制：同一时间只运行一个分析任务
+# 并发控制：同一时间只运行一个实例
 concurrency:
   group: stock-analysis
   cancel-in-progress: false
@@ -26,17 +26,16 @@ concurrency:
 jobs:
   analyze:
     runs-on: ubuntu-latest
-    # 添加超时限制，防止任务卡死
     timeout-minutes: 30
     
     steps:
-      - name: 随机延迟（避免固定时间访问）
-        run: sleep $((RANDOM % 60))  # 随机延迟0-60秒启动
+      - name: 随机延迟
+        run: sleep $((RANDOM % 60))
       
       - name: 检出代码
         uses: actions/checkout@v4
       
-      - name: 设置 Python 环境
+      - name: 设置 Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -47,239 +46,104 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
       
-      - name: 创建必要目录
-        run: |
-          mkdir -p data logs reports
+      - name: 创建目录
+        run: mkdir -p data logs reports
       
       - name: 执行股票分析
         env:
-          # ==========================================
-          # AI 配置
-          # ==========================================
-          # Gemini AI（主选）
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL || secrets.GEMINI_MODEL || 'gemini-3-flash-preview' }}
           GEMINI_MODEL_FALLBACK: ${{ vars.GEMINI_MODEL_FALLBACK || secrets.GEMINI_MODEL_FALLBACK || 'gemini-2.5-flash' }}
-          GEMINI_REQUEST_DELAY: '3.0'
-          
-          # AIHubMix（优先于 OPENAI_API_KEY，自动适配 base_url，推荐国内用户）
           AIHUBMIX_KEY: ${{ secrets.AIHUBMIX_KEY }}
-
-          # OpenAI 兼容 API（备选）
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL || secrets.OPENAI_BASE_URL }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL || secrets.OPENAI_MODEL }}
-
-          # Anthropic / Claude
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || secrets.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022' }}
-
-          # ==========================================
-          # 数据源
-          # ==========================================
           TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
-          
-          # ==========================================
-          # 搜索服务
-          # ==========================================
           BOCHA_API_KEYS: ${{ secrets.BOCHA_API_KEYS }}
           TAVILY_API_KEYS: ${{ secrets.TAVILY_API_KEYS }}
-          SERPAPI_API_KEYS: ${{ secrets.SERPAPI_API_KEYS }}
-          
-          # ==========================================
-          # 通知渠道（可同时配置多个，全部推送）
-          # ==========================================
-          
-          # 方式一：企业微信 Webhook
-          WECHAT_WEBHOOK_URL: ${{ secrets.WECHAT_WEBHOOK_URL }}
-          WECHAT_MSG_TYPE: ${{ vars.WECHAT_MSG_TYPE || secrets.WECHAT_MSG_TYPE || 'markdown' }}
-          
-          # 方式二：飞书 Webhook
-          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
-          
-          # 方式三：Telegram
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TELEGRAM_MESSAGE_THREAD_ID: ${{ secrets.TELEGRAM_MESSAGE_THREAD_ID }}
-          
-          # 方式四：邮件
-          EMAIL_SENDER: ${{ vars.EMAIL_SENDER || secrets.EMAIL_SENDER }}
-          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-          EMAIL_RECEIVERS: ${{ vars.EMAIL_RECEIVERS || secrets.EMAIL_RECEIVERS }}
-          EMAIL_SENDER_NAME: ${{ vars.EMAIL_SENDER_NAME || secrets.EMAIL_SENDER_NAME || 'daily_stock_analysis股票分析助手' }}
-          
-          # 方式五：Pushover
-          PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
-          PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
-          
-          # 方式六：PushPlus ⬅️ 新增！
-          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-          
-          # 方式七：自定义 Webhook（钉钉、Bark、自建服务等）
-          CUSTOM_WEBHOOK_URLS: ${{ secrets.CUSTOM_WEBHOOK_URLS }}
-          CUSTOM_WEBHOOK_BEARER_TOKEN: ${{ secrets.CUSTOM_WEBHOOK_BEARER_TOKEN }}
-          
-          # 方式八：Discord
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-          DISCORD_MAIN_CHANNEL_ID: ${{ secrets.DISCORD_MAIN_CHANNEL_ID }}
-          
-          # 方式九：飞书云文档
-          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
-          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
-          FEISHU_FOLDER_TOKEN: ${{ secrets.FEISHU_FOLDER_TOKEN }}
-
-          # 方式十：AstrBot
-          ASTRBOT_URL: ${{ secrets.ASTRBOT_URL }}
-          ASTRBOT_TOKEN: ${{ secrets.ASTRBOT_TOKEN }}
-
-          # 方式十一：Server酱3
-          SERVERCHAN3_SENDKEY: ${{ secrets.SERVERCHAN3_SENDKEY }}
-
-          # ==========================================
-          # 自选股配置
-          # ==========================================
           STOCK_LIST: ${{ vars.STOCK_LIST || secrets.STOCK_LIST || '600519' }}
-          MARKET_REVIEW_REGION: ${{ vars.MARKET_REVIEW_REGION || secrets.MARKET_REVIEW_REGION || 'cn' }}
-          
-          # ==========================================
-          # 运行配置 ⬅️ 新增！
-          # ==========================================
           REPORT_TYPE: ${{ vars.REPORT_TYPE || secrets.REPORT_TYPE || 'simple' }}
-          SINGLE_STOCK_NOTIFY: ${{ vars.SINGLE_STOCK_NOTIFY || secrets.SINGLE_STOCK_NOTIFY || 'false' }}
-          MARKET_REVIEW_ENABLED: ${{ vars.MARKET_REVIEW_ENABLED || secrets.MARKET_REVIEW_ENABLED || 'true' }}
-          ANALYSIS_DELAY: ${{ vars.ANALYSIS_DELAY || secrets.ANALYSIS_DELAY || '0' }}
-          
-          # ==========================================
-          # 系统配置
-          # ==========================================
-          LOG_LEVEL: INFO
-          MAX_WORKERS: ${{ vars.MAX_WORKERS || secrets.MAX_WORKERS || '1' }}
-          # GitHub Actions 环境建议关闭不稳定的数据源
-          ENABLE_CHIP_DISTRIBUTION: 'false'
-          # 实时行情数据源优先级（腾讯有量比且稳定，推荐首选）
-          # 可选值: tencent, akshare_sina, efinance, akshare_em, tushare
-          # 如果有 Tushare Pro 高积分账号，可将 tushare 放在首位
-          REALTIME_SOURCE_PRIORITY: ${{ vars.REALTIME_SOURCE_PRIORITY || 'tencent,akshare_sina,efinance,akshare_em' }}
-          
         run: |
-          # 判断运行模式
           MODE="${{ github.event.inputs.mode || 'full' }}"
+          echo "运行模式: $MODE"
           
-          echo "=========================================="
-          echo "🚀 A股自选股智能分析系统"
-          echo "=========================================="
-          echo "⏰ 时间: $(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')"
-          echo "🎯 运行模式: $MODE"
-          echo "📊 自选股: $STOCK_LIST"
-          echo "📝 报告类型: $REPORT_TYPE"
-          echo ""
-          echo "=========================================="
-          echo "📋 配置检查"
-          echo "=========================================="
-          echo "【AI 配置】"
-          echo "  Gemini API Key: $([ -n "$GEMINI_API_KEY" ] && echo '✅ 已配置' || echo '❌ 未配置')"
-          echo "  AIHubMix Key:   $([ -n "$AIHUBMIX_KEY" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
-          echo "  OpenAI API Key: $([ -n "$OPENAI_API_KEY" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
-          echo "  Anthropic Key:  $([ -n "$ANTHROPIC_API_KEY" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
-          echo ""
-          echo "【搜索引擎】"
-          echo "  Bocha API Keys: $([ -n "$BOCHA_API_KEYS" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
-          echo "  Tavily API Keys: $([ -n "$TAVILY_API_KEYS" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
-          echo ""
-          echo "【通知渠道】"
-          echo "  PushPlus: $([ -n "$PUSHPLUS_TOKEN" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
-          echo "  企业微信: $([ -n "$WECHAT_WEBHOOK_URL" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
-          echo "  飞书: $([ -n "$FEISHU_WEBHOOK_URL" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
-          echo "  Telegram: $([ -n "$TELEGRAM_BOT_TOKEN" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
-          echo "  Discord: $([ -n "$DISCORD_WEBHOOK_URL" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
-          echo "  AstrBot: $([ -n "$ASTRBOT_URL" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
-          echo "=========================================="
-          echo ""
-          
-          # 执行分析
           if [ "$MODE" = "market-only" ]; then
             python main.py --market-review
           elif [ "$MODE" = "stocks-only" ]; then
             python main.py --no-market-review
           else
-            
-          # 发送 Telegram 通知
-          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
-            echo ""
-            echo "=========================================="
-            echo "📱 发送 Telegram 通知"
-            echo "=========================================="
-            
-            # 查找生成的报告文件
-            REPORT_FILE=$(ls -t reports/*.md 2>/dev/null | head -1)
-            
-            if [ -n "$REPORT_FILE" ] && [ -f "$REPORT_FILE" ]; then
-              echo "找到报告: $REPORT_FILE"
-              
-              # 读取报告内容（前4000字符，Telegram限制）
-              REPORT_CONTENT=$(head -c 4000 "$REPORT_FILE")
-              
-              # 使用 Python 发送
-              python3 << 'PYEOF'
+            python main.py
+          fi
+      
+      - name: 发送 Telegram 通知
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_MESSAGE_THREAD_ID: ${{ secrets.TELEGRAM_MESSAGE_THREAD_ID }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Telegram 未配置，跳过发送"
+            exit 0
+          fi
+          
+          echo "正在发送 Telegram 通知..."
+          
+          # 查找最新的报告文件
+          REPORT_FILE=$(ls -t reports/*.md 2>/dev/null | head -1)
+          
+          if [ -z "$REPORT_FILE" ]; then
+            echo "未找到报告文件"
+            exit 0
+          fi
+          
+          echo "找到报告: $REPORT_FILE"
+          
+          # 使用 Python 发送
+          python3 << 'EOF'
 import os
 import requests
-import json
 
-token = os.environ.get('TELEGRAM_BOT_TOKEN')
-chat_id = os.environ.get('TELEGRAM_CHAT_ID')
+token = os.environ['TELEGRAM_BOT_TOKEN']
+chat_id = os.environ['TELEGRAM_CHAT_ID']
 thread_id = os.environ.get('TELEGRAM_MESSAGE_THREAD_ID')
 
 # 读取报告
-report_file = os.environ.get('REPORT_FILE', 'reports/latest.md')
-if os.path.exists(report_file):
-    with open(report_file, 'r', encoding='utf-8') as f:
-        content = f.read()[:4000]
-else:
-    # 尝试查找任何报告文件
-    import glob
-    files = glob.glob('reports/*.md')
-    if files:
-        with open(max(files, key=os.path.getctime), 'r', encoding='utf-8') as f:
-            content = f.read()[:4000]
-    else:
-        content = "未找到报告文件"
+import glob
+files = glob.glob('reports/*.md')
+if not files:
+    print("未找到报告文件")
+    exit(0)
 
-# 如果太长，添加省略号
+latest = max(files, key=os.path.getctime)
+with open(latest, 'r', encoding='utf-8') as f:
+    content = f.read()[:4000]
+
 if len(content) >= 4000:
     content += "\n\n... (报告已截断)"
 
-# 发送消息
+# 发送
 url = f"https://api.telegram.org/bot{token}/sendMessage"
 payload = {
     "chat_id": chat_id,
     "text": f"📈 股票分析报告\n\n{content}",
-    "parse_mode": "Markdown",
     "disable_web_page_preview": True
 }
 
 if thread_id:
     payload["message_thread_id"] = thread_id
 
-try:
-    response = requests.post(url, json=payload, timeout=30)
-    result = response.json()
-    if result.get("ok"):
-        print(f"✅ Telegram 发送成功，Message ID: {result['result']['message_id']}")
-    else:
-        print(f"❌ 发送失败: {result.get('description')}")
-except Exception as e:
-    print(f"❌ 发送异常: {e}")
-PYEOF
-            else
-              echo "⚠️ 未找到报告文件"
-            fi
-          else
-            echo "⚠️ Telegram 未配置，跳过发送"
-          fipython main.py
-          fi
+resp = requests.post(url, json=payload, timeout=30)
+result = resp.json()
+
+if result.get("ok"):
+    print(f"✅ 发送成功，Message ID: {result['result']['message_id']}")
+else:
+    print(f"❌ 发送失败: {result.get('description')}")
+EOF
       
-      - name: 上传分析报告
+      - name: 上传分析结果
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -288,22 +152,3 @@ PYEOF
             reports/
             logs/
           retention-days: 30
-      
-      - name: 显示运行结果
-        if: always()
-        run: |
-          echo ""
-          echo "=========================================="
-          echo "📊 分析完成"
-          echo "=========================================="
-          if [ -d "reports" ] && [ "$(ls -A reports 2>/dev/null)" ]; then
-            echo "生成的报告:"
-            ls -la reports/
-          else
-            echo "⚠️ 未生成报告文件"
-          fi
-          echo ""
-          if [ -f "logs/stock_analysis_$(date +%Y%m%d).log" ]; then
-            echo "📜 最近日志（最后 30 行）:"
-            tail -30 logs/stock_analysis_*.log 2>/dev/null || echo "无日志"
-          fi
