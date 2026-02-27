@@ -1,8 +1,11 @@
+
 name: stock-analysis
+
 on:
   schedule:
     - cron: '0 10 * * 1-5'
   workflow_dispatch:
+
 jobs:
   analyze:
     runs-on: ubuntu-latest
@@ -13,21 +16,21 @@ jobs:
           python-version: '3.11'
       - run: pip install -r requirements.txt
       - run: mkdir -p reports
-      - name: run-analysis
+      - name: analyze
         env:
-          GEMINI_API_KEY: '${{ secrets.GEMINI_API_KEY }}'
-          OPENAI_API_KEY: '${{ secrets.OPENAI_API_KEY }}'
-          OPENAI_BASE_URL: '${{ secrets.OPENAI_BASE_URL }}'
-          OPENAI_MODEL: '${{ secrets.OPENAI_MODEL }}'
-          STOCK_LIST: '${{ secrets.STOCK_LIST }}'
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          STOCK_LIST: ${{ secrets.STOCK_LIST }}
         run: python main.py
-      - name: pushplus-notify
+      - name: notify
         if: always()
         env:
-          PUSHPLUS_TOKEN: '${{ secrets.PUSHPLUS_TOKEN }}'
-        run: python3 send_notify.py
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+        run: |
+          curl -X POST "http://www.pushplus.plus/send" \
+            -H "Content-Type: application/json" \
+            -d "{\"token\":\"$PUSHPLUS_TOKEN\",\"title\":\"股票报告\",\"content\":\"$(cat reports/*.md | head -c 8000)\",\"template\":\"txt\"}"
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: reports
           path: reports/
